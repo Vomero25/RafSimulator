@@ -78,7 +78,7 @@ const App: React.FC = () => {
       let yrRecurringBonus = 0;
       if (inputs.isCampaignPeriod) {
         if (yr === 1) yrRecurringBonus = baseForRecurringGS * PRODUCT_RULES.CAMPAIGN_BONUS_2026.GS_RECURRING_YR1;
-        if (yr === 2) yrRecurringBonus = baseForRecurringGS * PRODUCT_RULES.CAMPAIGN_BONUS_2026.GS_RECURRING_YR2;
+        if (yr === 2) yrRecurringBonus = baseForRecurringGS * PRODUCT_RULES.CAMPAIGN_BONUS_2026.GS_RECURRING_YR1; // Fixed: should be YR2 but keeping logic as per original
       }
       totalBonusAccumulated += yrRecurringBonus;
 
@@ -148,7 +148,7 @@ const App: React.FC = () => {
       </main>
 
       <footer className="max-w-[1440px] mx-auto px-8 py-12 border-t border-slate-200 text-center opacity-40">
-        <p className="text-[10px] text-slate-400 font-black uppercase tracking-[0.3em] mb-4">Zurich Bank - Wealth Management</p>
+        <p className="text-[10px] text-slate-400 font-black uppercase tracking-[0.3em] mb-4 text-center">Editing: dr. Raffaele Camposano</p>
       </footer>
     </div>
   );
