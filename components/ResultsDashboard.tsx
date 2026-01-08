@@ -1,5 +1,5 @@
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, ReferenceLine } from 'recharts';
 import { Shield, Lock, Info, TrendingUp, Wallet, CheckCircle2 } from 'lucide-react';
 import { YearProjection, SimulationInputs } from '../types';
@@ -14,8 +14,16 @@ interface Props {
 
 const ResultsDashboard: React.FC<Props> = ({ projections, inputs }) => {
   const [activeAuditYear, setActiveAuditYear] = useState<1 | 2>(1);
+  
+  // Reset dell'audit se la durata viene ridotta a 1 anno
+  useEffect(() => {
+    if (projections.length < 2 && activeAuditYear === 2) {
+      setActiveAuditYear(1);
+    }
+  }, [projections.length, activeAuditYear]);
+
   const last = projections[projections.length - 1];
-  const initial = inputs.initialPremium;
+  const initial = Number(inputs.initialPremium);
   
   const totalValueAtEnd = last.totalValue;
   const growth = totalValueAtEnd - initial;
@@ -41,12 +49,10 @@ const ResultsDashboard: React.FC<Props> = ({ projections, inputs }) => {
     const gsPartStart = totalInvested * (inputs.gsPercentage / 100);
     const ulPartStart = totalInvested * (1 - (inputs.gsPercentage / 100));
 
-    // Dati Anno 1 dal motore
     const yr1 = projections[0];
     const gsNetRate = inputs.estimatedGrowthGS - PRODUCT_RULES.GS_MANAGEMENT_FEE[inputs.cppClass];
     const ulNetRate = inputs.estimatedGrowthUnitLinked - PRODUCT_RULES.ANNUAL_MANAGEMENT_FEE[inputs.cppClass].first5;
 
-    // Dati Anno 2 dal motore (se disponibile)
     const yr2 = projections[1] || yr1;
 
     return {
@@ -70,7 +76,7 @@ const ResultsDashboard: React.FC<Props> = ({ projections, inputs }) => {
         gsOpening: yr1.gsValue,
         ulOpening: yr1.unitLinkedValue,
         gsNetRate,
-        ulNetRate, // Resta "first5" fino al 5 anno
+        ulNetRate, 
         bonusRate: inputs.isCampaignPeriod ? 0.010 : 0,
         bonusAmount: inputs.isCampaignPeriod ? gsPartStart * 0.010 : 0,
         gsClosing: yr2.gsValue,
@@ -148,8 +154,9 @@ const ResultsDashboard: React.FC<Props> = ({ projections, inputs }) => {
               Anno 1
             </button>
             <button 
+              disabled={projections.length < 2}
               onClick={() => setActiveAuditYear(2)}
-              className={`px-6 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${activeAuditYear === 2 ? 'bg-white text-slate-900 shadow-lg' : 'text-white/40 hover:text-white'}`}
+              className={`px-6 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${activeAuditYear === 2 ? 'bg-white text-slate-900 shadow-lg' : 'text-white/40 hover:text-white disabled:opacity-20 disabled:cursor-not-allowed'}`}
             >
               Anno 2
             </button>

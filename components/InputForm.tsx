@@ -10,10 +10,15 @@ interface Props {
 const InputForm: React.FC<Props> = ({ inputs, setInputs }) => {
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
     const { name, value, type } = e.target;
+    
+    // FORZATURA NUMERICA: Evita che i valori degli slider vengano trattati come stringhe
+    // causando concatenazioni errate (es. "100000" + 2000 = "1000002000")
+    const isNumericField = type === 'number' || type === 'range' || name === 'initialPremium' || name === 'horizonYears' || name === 'age';
+    
     setInputs(prev => ({
       ...prev,
       [name]: type === 'checkbox' ? (e.target as HTMLInputElement).checked : 
-               type === 'number' ? parseFloat(value) : value
+               isNumericField ? parseFloat(value) : value
     }));
   };
 
@@ -51,7 +56,7 @@ const InputForm: React.FC<Props> = ({ inputs, setInputs }) => {
           <div>
             <label className="flex justify-between text-[10px] font-black text-slate-400 mb-2 uppercase tracking-wider">
               Capitale da Investire
-              <span className="text-slate-900 text-xs">€ {inputs.initialPremium.toLocaleString()}</span>
+              <span className="text-slate-900 text-xs">€ {Number(inputs.initialPremium).toLocaleString()}</span>
             </label>
             <input 
               type="range" name="initialPremium" min="15000" max="1000000" step="5000"
