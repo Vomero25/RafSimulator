@@ -1,7 +1,7 @@
 
-import React from 'react';
+import React, { useState } from 'react';
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, ReferenceLine } from 'recharts';
-import { Shield, Lock, Info, TrendingUp, Wallet, CheckCircle2 } from 'lucide-react';
+import { Shield, Lock, Info, TrendingUp, Wallet, CheckCircle2, ChevronRight } from 'lucide-react';
 import { YearProjection, SimulationInputs } from '../types';
 import { PRODUCT_RULES } from '../constants';
 import ProductDetails from './ProductDetails';
@@ -13,6 +13,7 @@ interface Props {
 }
 
 const ResultsDashboard: React.FC<Props> = ({ projections, inputs }) => {
+  const [activeAuditYear, setActiveAuditYear] = useState<1 | 2>(1);
   const last = projections[projections.length - 1];
   const initial = inputs.initialPremium;
   
@@ -29,41 +30,77 @@ const ResultsDashboard: React.FC<Props> = ({ projections, inputs }) => {
   const formatEuroPrecise = (val: number) => 
     new Intl.NumberFormat('it-IT', { style: 'currency', currency: 'EUR', minimumFractionDigits: 2 }).format(val);
 
-  // LOGICA DI AUDIT CERTIFICATA (ANNO 1)
-  const audit = (() => {
+  // LOGICA DI AUDIT CERTIFICATA (ANNO 1 E ANNO 2)
+  const auditData = (() => {
+    // Calcoli Anno 1
     const upfrontRate = inputs.isCampaignPeriod ? 0.01 : 0;
     const upfrontBonus = initial * upfrontRate;
     const sacrificeCF = inputs.bonusSacrificeCF ? initial * 0.01 : 0;
     const totalInvested = initial + upfrontBonus + sacrificeCF;
-    
     const gsPartStart = totalInvested * (inputs.gsPercentage / 100);
     const ulPartStart = totalInvested * (1 - (inputs.gsPercentage / 100));
     
-    // GS Formula: (1 + i - c) + bonus
     const gsNetRate = inputs.estimatedGrowthGS - PRODUCT_RULES.GS_MANAGEMENT_FEE[inputs.cppClass];
-    const gsRecurringBonus = inputs.isCampaignPeriod ? gsPartStart * PRODUCT_RULES.CAMPAIGN_BONUS_2026.GS_RECURRING_YR1 : 0;
-    const gsFinal = (gsPartStart * (1 + gsNetRate)) + gsRecurringBonus;
+    const gsBonusRateYr1 = inputs.isCampaignPeriod ? PRODUCT_RULES.CAMPAIGN_BONUS_2026.GS_RECURRING_YR1 : 0;
+    const gsRecurringBonusYr1 = gsPartStart * gsBonusRateYr1;
+    const gsFinalYr1 = (gsPartStart * (1 + gsNetRate)) + gsRecurringBonusYr1;
     
-    // UL Formula: (1 + i - c)
-    const ulNetRate = inputs.estimatedGrowthUnitLinked - PRODUCT_RULES.ANNUAL_MANAGEMENT_FEE[inputs.cppClass].first5;
-    const ulFinal = ulPartStart * (1 + ulNetRate);
+    const ulNetRateYr1 = inputs.estimatedGrowthUnitLinked - PRODUCT_RULES.ANNUAL_MANAGEMENT_FEE[inputs.cppClass].first5;
+    const ulFinalYr1 = ulPartStart * (1 + ulNetRateYr1);
     
-    const totalLordo = gsFinal + ulFinal;
-    const penaltyRate = PRODUCT_RULES.SURRENDER_PENALTIES[inputs.cppClass][0];
-    const penaltyAmount = totalLordo * penaltyRate;
-    const surrenderValue = totalLordo - penaltyAmount;
+    const totalLordoYr1 = gsFinalYr1 + ulFinalYr1;
+    const penaltyRateYr1 = PRODUCT_RULES.SURRENDER_PENALTIES[inputs.cppClass][0];
+    const penaltyAmountYr1 = totalLordoYr1 * penaltyRateYr1;
+    const surrenderValueYr1 = totalLordoYr1 - penaltyAmountYr1;
+
+    // Calcoli Anno 2
+    const gsBonusRateYr2 = inputs.isCampaignPeriod ? PRODUCT_RULES.CAMPAIGN_BONUS_2026.GS_RECURRING_YR2 : 0;
+    const gsRecurringBonusYr2 = gsPartStart * gsBonusRateYr2; // Base è sempre la quota GS iniziale post-upfront
+    const gsFinalYr2 = (gsFinalYr1 * (1 + gsNetRate)) + gsRecurringBonusYr2;
+    
+    const ulNetRateYr2 = inputs.estimatedGrowthUnitLinked - PRODUCT_RULES.ANNUAL_MANAGEMENT_FEE[inputs.cppClass].first5;
+    const ulFinalYr2 = ulFinalYr1 * (1 + ulNetRateYr2);
+    
+    const totalLordoYr2 = gsFinalYr2 + ulFinalYr2;
+    const penaltyRateYr2 = PRODUCT_RULES.SURRENDER_PENALTIES[inputs.cppClass][1];
+    const penaltyAmountYr2 = totalLordoYr2 * penaltyRateYr2;
+    const surrenderValueYr2 = totalLordoYr2 - penaltyAmountYr2;
 
     return {
-      initial, upfrontBonus, sacrificeCF, totalInvested,
-      gsPartStart, gsNetRate, gsRecurringBonus, gsFinal,
-      ulPartStart, ulNetRate, ulFinal,
-      totalLordo, penaltyRate, penaltyAmount, surrenderValue,
-      gsGross: inputs.estimatedGrowthGS,
-      gsFee: PRODUCT_RULES.GS_MANAGEMENT_FEE[inputs.cppClass],
-      ulGross: inputs.estimatedGrowthUnitLinked,
-      ulFee: PRODUCT_RULES.ANNUAL_MANAGEMENT_FEE[inputs.cppClass].first5
+      1: {
+        opening: totalInvested,
+        gsOpening: gsPartStart,
+        ulOpening: ulPartStart,
+        gsNetRate,
+        ulNetRate: ulNetRateYr1,
+        bonusRate: gsBonusRateYr1,
+        bonusAmount: gsRecurringBonusYr1,
+        gsClosing: gsFinalYr1,
+        ulClosing: ulFinalYr1,
+        totalGross: totalLordoYr1,
+        penaltyRate: penaltyRateYr1,
+        penaltyAmount: penaltyAmountYr1,
+        surrenderValue: surrenderValueYr1
+      },
+      2: {
+        opening: totalLordoYr1,
+        gsOpening: gsFinalYr1,
+        ulOpening: ulFinalYr1,
+        gsNetRate,
+        ulNetRate: ulNetRateYr2,
+        bonusRate: gsBonusRateYr2,
+        bonusAmount: gsRecurringBonusYr2,
+        gsClosing: gsFinalYr2,
+        ulClosing: ulFinalYr2,
+        totalGross: totalLordoYr2,
+        penaltyRate: penaltyRateYr2,
+        penaltyAmount: penaltyAmountYr2,
+        surrenderValue: surrenderValueYr2
+      }
     };
   })();
+
+  const currentAudit = auditData[activeAuditYear];
 
   return (
     <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-700 pb-20">
@@ -107,30 +144,32 @@ const ResultsDashboard: React.FC<Props> = ({ projections, inputs }) => {
         </div>
       </div>
 
-      {/* DIMOSTRAZIONE ESPLICITA ANNO 1 - BLINDATA */}
+      {/* DIMOSTRAZIONE ESPLICITA AUDIT - BLINDATA */}
       <div className="bg-white border-4 border-slate-900 rounded-[3rem] overflow-hidden shadow-2xl relative">
-        <div className="absolute top-12 right-12 w-24 h-24 border-8 border-emerald-500/10 rounded-full flex items-center justify-center -rotate-12 pointer-events-none">
-           <span className="text-[10px] font-black text-emerald-500/30 uppercase text-center leading-none tracking-tighter">AUDIT<br/>CERTIFICATO</span>
-        </div>
-        
-        <div className="bg-slate-900 p-8 text-white flex justify-between items-center">
+        <div className="bg-slate-900 p-8 text-white flex flex-col md:flex-row justify-between items-center gap-6">
           <div className="flex items-center gap-4">
             <div className="w-12 h-12 bg-white/10 rounded-2xl flex items-center justify-center text-blue-400">
                <Shield size={24} strokeWidth={2.5} />
             </div>
             <div>
               <h3 className="text-2xl font-black tracking-tighter uppercase leading-none">Certificazione Motore</h3>
-              <p className="text-[10px] font-black text-blue-300 uppercase tracking-[0.3em] mt-1">Verifica Formule Lineari - Anno 1</p>
+              <p className="text-[10px] font-black text-blue-300 uppercase tracking-[0.3em] mt-1">Audit Analitico Formule - Step by Step</p>
             </div>
           </div>
-          <div className="flex items-center gap-4">
-            <div className="bg-white/10 px-4 py-2 rounded-2xl border border-white/20 text-center">
-              <span className="block text-[8px] font-black uppercase opacity-60">Metodologia</span>
-              <span className="text-emerald-400 font-black text-xs uppercase">1 + (i - c)</span>
-            </div>
-            <div className="w-10 h-10 bg-emerald-500 rounded-full flex items-center justify-center shadow-lg shadow-emerald-500/40">
-               <Lock size={20} className="text-white" strokeWidth={3} />
-            </div>
+          
+          <div className="flex bg-white/5 p-1.5 rounded-2xl border border-white/10">
+            <button 
+              onClick={() => setActiveAuditYear(1)}
+              className={`px-6 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${activeAuditYear === 1 ? 'bg-white text-slate-900 shadow-lg' : 'text-white/40 hover:text-white'}`}
+            >
+              Anno 1
+            </button>
+            <button 
+              onClick={() => setActiveAuditYear(2)}
+              className={`px-6 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${activeAuditYear === 2 ? 'bg-white text-slate-900 shadow-lg' : 'text-white/40 hover:text-white'}`}
+            >
+              Anno 2
+            </button>
           </div>
         </div>
 
@@ -138,84 +177,90 @@ const ResultsDashboard: React.FC<Props> = ({ projections, inputs }) => {
           <div className="grid grid-cols-1 xl:grid-cols-2 gap-12">
             <div className="space-y-6">
               <div className="flex items-center gap-4 mb-2">
-                <span className="w-10 h-10 bg-slate-100 rounded-full flex items-center justify-center font-black text-slate-900 shadow-inner">1</span>
-                <h4 className="text-xs font-black uppercase tracking-widest">Capitale & Bonus Upfront</h4>
+                <span className="w-10 h-10 bg-slate-100 rounded-full flex items-center justify-center font-black text-slate-900 shadow-inner">{activeAuditYear === 1 ? '1' : '3'}</span>
+                <h4 className="text-xs font-black uppercase tracking-widest">
+                  {activeAuditYear === 1 ? 'Capitale Iniziale & Bonus' : 'Capitale di Partenza Anno 2'}
+                </h4>
               </div>
               <div className="space-y-3 font-medium text-[11px] text-slate-600">
                 <div className="flex justify-between border-b border-slate-100 pb-2 italic text-slate-400">
-                  <span>Capitale Lordo Versato</span>
-                  <span>{formatEuroPrecise(audit.initial)}</span>
+                  <span>{activeAuditYear === 1 ? 'Capitale Lordo Versato' : 'Valore Totale fine Anno 1'}</span>
+                  <span>{formatEuroPrecise(activeAuditYear === 1 ? initial : auditData[1].totalGross)}</span>
                 </div>
-                {audit.upfrontBonus > 0 && (
-                  <div className="flex justify-between border-b border-slate-100 pb-2 text-emerald-600">
-                    <span>+ Bonus Upfront (1%)</span>
-                    <span className="font-black">+{formatEuroPrecise(audit.upfrontBonus)}</span>
-                  </div>
-                )}
-                {audit.sacrificeCF > 0 && (
-                  <div className="flex justify-between border-b border-slate-100 pb-2 text-emerald-600">
-                    <span>+ Bonus Sacrificio CF (1%)</span>
-                    <span className="font-black">+{formatEuroPrecise(audit.sacrificeCF)}</span>
-                  </div>
+                {activeAuditYear === 1 && (
+                  <>
+                    {inputs.isCampaignPeriod && (
+                      <div className="flex justify-between border-b border-slate-100 pb-2 text-emerald-600">
+                        <span>+ Bonus Upfront (1%)</span>
+                        <span className="font-black">+{formatEuroPrecise(initial * 0.01)}</span>
+                      </div>
+                    )}
+                    {inputs.bonusSacrificeCF && (
+                      <div className="flex justify-between border-b border-slate-100 pb-2 text-emerald-600">
+                        <span>+ Bonus Sacrificio CF (1%)</span>
+                        <span className="font-black">+{formatEuroPrecise(initial * 0.01)}</span>
+                      </div>
+                    )}
+                  </>
                 )}
                 <div className="flex justify-between pt-2">
-                  <span className="font-black uppercase text-slate-400">Totale Investito Netto</span>
-                  <span className="text-base font-black text-slate-900">{formatEuroPrecise(audit.totalInvested)}</span>
+                  <span className="font-black uppercase text-slate-400">{activeAuditYear === 1 ? 'Totale Investito Netto' : 'Base di Calcolo Anno 2'}</span>
+                  <span className="text-base font-black text-slate-900">{formatEuroPrecise(currentAudit.opening)}</span>
                 </div>
               </div>
 
               <div className="grid grid-cols-2 gap-4 mt-6">
                 <div className="p-4 bg-emerald-50 rounded-3xl border border-emerald-100 shadow-sm">
                   <span className="text-[9px] font-black text-emerald-600 uppercase">Allocato GS ({inputs.gsPercentage}%)</span>
-                  <p className="text-lg font-black text-emerald-700">{formatEuro(audit.gsPartStart)}</p>
+                  <p className="text-lg font-black text-emerald-700">{formatEuro(currentAudit.gsOpening)}</p>
                 </div>
                 <div className="p-4 bg-blue-50 rounded-3xl border border-blue-100 shadow-sm">
                   <span className="text-[9px] font-black text-blue-600 uppercase">Allocato UL ({100-inputs.gsPercentage}%)</span>
-                  <p className="text-lg font-black text-blue-700">{formatEuro(audit.ulPartStart)}</p>
+                  <p className="text-lg font-black text-blue-700">{formatEuro(currentAudit.ulOpening)}</p>
                 </div>
               </div>
             </div>
 
             <div className="space-y-6">
                <div className="flex items-center gap-4 mb-2">
-                <span className="w-10 h-10 bg-slate-100 rounded-full flex items-center justify-center font-black text-slate-900 shadow-inner">2</span>
-                <h4 className="text-xs font-black uppercase tracking-widest">Applicazione Trattenute Gestione</h4>
+                <span className="w-10 h-10 bg-slate-100 rounded-full flex items-center justify-center font-black text-slate-900 shadow-inner">{activeAuditYear === 1 ? '2' : '4'}</span>
+                <h4 className="text-xs font-black uppercase tracking-widest">Performance & Bonus Ricorrenti</h4>
               </div>
               <div className="bg-slate-50 p-6 rounded-[2rem] border border-slate-100 space-y-6">
                 <div className="space-y-3">
-                  <p className="text-[10px] font-black text-emerald-600 uppercase tracking-widest">Gestione Separata (Trend)</p>
+                  <div className="flex justify-between items-center">
+                    <p className="text-[10px] font-black text-emerald-600 uppercase tracking-widest">Gestione Separata (Trend)</p>
+                    {activeAuditYear === 2 && <span className="text-[8px] font-black bg-emerald-500 text-white px-2 py-0.5 rounded-full uppercase">Bonus raddoppiato</span>}
+                  </div>
                   <div className="bg-white p-4 rounded-2xl border border-slate-100 font-mono text-[10px] space-y-1 shadow-sm">
                     <div className="flex justify-between">
-                      <span>Rendimento Lordo Stimato</span>
-                      <span className="text-slate-900">{(audit.gsGross*100).toFixed(2)}%</span>
+                      <span>Rendimento Netto (i - c)</span>
+                      <span className="text-slate-900">{(currentAudit.gsNetRate*100).toFixed(2)}%</span>
                     </div>
-                    <div className="flex justify-between text-red-500 font-bold">
-                      <span>- Costo Gestione (Cl. {inputs.cppClass.slice(-1)})</span>
-                      <span>-{(audit.gsFee*100).toFixed(2)}%</span>
-                    </div>
+                    {inputs.isCampaignPeriod && (
+                      <div className="flex justify-between text-emerald-600 font-bold">
+                        <span>+ Bonus Ricorrente Anno {activeAuditYear}</span>
+                        <span>+{(currentAudit.bonusRate*100).toFixed(1)}%</span>
+                      </div>
+                    )}
                     <div className="h-px bg-slate-100 my-1"></div>
-                    <div className="flex justify-between text-emerald-600 font-black">
-                      <span>= Tasso di Rendimento Netto</span>
-                      <span>{(audit.gsNetRate*100).toFixed(2)}%</span>
+                    <div className="flex justify-between text-slate-900 font-black italic">
+                      <span>Valore GS Finale Anno {activeAuditYear}</span>
+                      <span>{formatEuro(currentAudit.gsClosing)}</span>
                     </div>
                   </div>
-                  <p className="text-[9px] text-slate-400 italic">Formula: {formatEuro(audit.gsPartStart)} × (1 + {(audit.gsNetRate*100).toFixed(2)}%) + Bonus 0.5%</p>
                 </div>
                 <div className="space-y-3">
                   <p className="text-[10px] font-black text-blue-600 uppercase tracking-widest">Unit-Linked (Linee)</p>
                   <div className="bg-white p-4 rounded-2xl border border-slate-100 font-mono text-[10px] space-y-1 shadow-sm">
                     <div className="flex justify-between">
-                      <span>Rendimento Lordo Stimato</span>
-                      <span className="text-slate-900">{(audit.ulGross*100).toFixed(2)}%</span>
-                    </div>
-                    <div className="flex justify-between text-red-500 font-bold">
-                      <span>- Costo Gestione (Cl. {inputs.cppClass.slice(-1)})</span>
-                      <span>-{(audit.ulFee*100).toFixed(2)}%</span>
+                      <span>Rendimento Netto (i - c)</span>
+                      <span className="text-slate-900">{(currentAudit.ulNetRate*100).toFixed(2)}%</span>
                     </div>
                     <div className="h-px bg-slate-100 my-1"></div>
-                    <div className="flex justify-between text-blue-600 font-black">
-                      <span>= Tasso di Rendimento Netto</span>
-                      <span>{(audit.ulNetRate*100).toFixed(2)}%</span>
+                    <div className="flex justify-between text-slate-900 font-black italic">
+                      <span>Valore UL Finale Anno {activeAuditYear}</span>
+                      <span>{formatEuro(currentAudit.ulClosing)}</span>
                     </div>
                   </div>
                 </div>
@@ -227,29 +272,38 @@ const ResultsDashboard: React.FC<Props> = ({ projections, inputs }) => {
              <div className="absolute top-0 right-0 w-full h-full bg-blue-600/5 pointer-events-none"></div>
              <div className="flex flex-col md:flex-row items-center justify-between gap-10 relative z-10">
                 <div className="text-center md:text-left">
-                  <span className="text-blue-300 font-black text-[10px] uppercase tracking-[0.4em]">Montante Lordo Anno 1</span>
+                  <span className="text-blue-300 font-black text-[10px] uppercase tracking-[0.4em]">Montante Lordo Anno {activeAuditYear}</span>
                   <div className="flex items-baseline gap-2 mt-2">
-                    <span className="text-5xl font-black tracking-tighter">{formatEuro(audit.totalLordo)}</span>
+                    <span className="text-5xl font-black tracking-tighter">{formatEuro(currentAudit.totalGross)}</span>
                   </div>
-                  <p className="text-[9px] text-slate-500 mt-2">Capitale rivalutato post-costi + bonus ricorrenti</p>
+                  <p className="text-[9px] text-slate-500 mt-2 uppercase font-bold tracking-tight">Capitale certificato post-costi e bonus</p>
                 </div>
                 <div className="flex-1 max-w-xs space-y-3">
                    <div className="flex justify-between text-[11px] font-bold border-b border-white/10 pb-1">
                       <span className="text-slate-400">Penale Riscatto</span>
-                      <span className="text-red-400">{(audit.penaltyRate * 100).toFixed(1)}%</span>
+                      <span className="text-red-400">{(currentAudit.penaltyRate * 100).toFixed(1)}%</span>
                    </div>
                    <div className="flex justify-between text-[11px] font-bold">
                       <span className="text-slate-400">Importo Penale</span>
-                      <span className="text-red-400">-{formatEuro(audit.penaltyAmount)}</span>
+                      <span className="text-red-400">-{formatEuro(currentAudit.penaltyAmount)}</span>
                    </div>
                 </div>
                 <div className="text-center md:text-right border-l-0 md:border-l border-white/10 pl-0 md:pl-10">
                   <span className="text-amber-400 font-black text-[10px] uppercase tracking-[0.4em]">Valore di Riscatto Netto</span>
                   <p className="text-6xl font-black text-amber-400 tracking-tighter mt-2 drop-shadow-xl">
-                    {formatEuro(audit.surrenderValue)}
+                    {formatEuro(currentAudit.surrenderValue)}
                   </p>
                 </div>
              </div>
+          </div>
+          
+          <div className="mt-8 flex items-center justify-center gap-4 text-slate-400">
+             <Info size={14} />
+             <p className="text-[9px] font-bold uppercase tracking-widest leading-none">
+               {activeAuditYear === 1 
+                 ? "L'anno 1 include i bonus upfront e il bonus ricorrente GS dello 0,5%."
+                 : "L'anno 2 evidenzia il bonus ricorrente GS raddoppiato all'1,0% (Pag. 7 del fascicolo)."}
+             </p>
           </div>
         </div>
       </div>
