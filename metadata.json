@@ -1,0 +1,5 @@
+{
+  "name": "Zurich MultInvest Plus Simulator - Stable Edition v1.0",
+  "description": "Versione stabile e blindata del simulatore multiramo Zurich MultInvest Plus, con audit dei costi certificato e logica lineare.",
+  "requestFramePermissions": []
+}
