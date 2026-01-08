@@ -42,12 +42,11 @@ const App: React.FC = () => {
   const projections = useMemo(() => {
     const results: YearProjection[] = [];
     
+    // 1. CALCOLO BONUS INIZIALI (UPFRONT)
     let initialBonusRate = 0;
     if (inputs.isCampaignPeriod) {
       initialBonusRate += PRODUCT_RULES.CAMPAIGN_BONUS_2026.UPFRONT_ON_TOTAL;
     }
-    
-    // Bonus Sacrificio CF (Aggiuntivo +1% una tantum)
     if (inputs.bonusSacrificeCF) {
       initialBonusRate += 0.01;
     }
@@ -55,43 +54,55 @@ const App: React.FC = () => {
     const initialBonusAmount = inputs.initialPremium * initialBonusRate;
     const initialInvested = inputs.initialPremium + initialBonusAmount;
     
+    // 2. ALLOCAZIONE INIZIALE
     let currentGS = initialInvested * (inputs.gsPercentage / 100);
     let currentUL = initialInvested * (1 - inputs.gsPercentage / 100);
     let totalBonusAccumulated = initialBonusAmount;
 
+    // Base per i bonus ricorrenti (Quota GS iniziale post-bonus upfront)
     const baseForRecurringGS = currentGS;
 
     for (let yr = 1; yr <= inputs.horizonYears; yr++) {
       const yrAge = inputs.age + yr;
       const idx = yr - 1;
+      
+      // Rendimenti lordi dell'anno corrente
       const yrReturnGS = inputs.useVariableReturns ? (inputs.yearlyReturnsGS[idx] ?? inputs.estimatedGrowthGS) : inputs.estimatedGrowthGS;
       const yrReturnUL = inputs.useVariableReturns ? (inputs.yearlyReturnsUL[idx] ?? inputs.estimatedGrowthUnitLinked) : inputs.estimatedGrowthUnitLinked;
 
+      // Costi di gestione (Pag. 5)
       const ulFeeRate = yr <= 5 
         ? PRODUCT_RULES.ANNUAL_MANAGEMENT_FEE[inputs.cppClass].first5 
         : PRODUCT_RULES.ANNUAL_MANAGEMENT_FEE[inputs.cppClass].after5;
       const gsFeeRate = PRODUCT_RULES.GS_MANAGEMENT_FEE[inputs.cppClass];
 
-      // LOGICA LINEARE: (1 + Rendimento - Costo)
+      // 3. MOTORE DI CALCOLO LINEARE: (1 + i - c)
+      // Evoluzione Unit Linked
       currentUL = currentUL * (1 + yrReturnUL - ulFeeRate);
       
+      // Bonus Ricorrenti Campagna (Pag. 7)
       let yrRecurringBonus = 0;
       if (inputs.isCampaignPeriod) {
         if (yr === 1) yrRecurringBonus = baseForRecurringGS * PRODUCT_RULES.CAMPAIGN_BONUS_2026.GS_RECURRING_YR1;
-        if (yr === 2) yrRecurringBonus = baseForRecurringGS * PRODUCT_RULES.CAMPAIGN_BONUS_2026.GS_RECURRING_YR1; // Fixed: should be YR2 but keeping logic as per original
+        if (yr === 2) yrRecurringBonus = baseForRecurringGS * PRODUCT_RULES.CAMPAIGN_BONUS_2026.GS_RECURRING_YR2;
       }
       totalBonusAccumulated += yrRecurringBonus;
 
+      // Evoluzione Gestione Separata
       currentGS = (currentGS * (1 + yrReturnGS - gsFeeRate)) + yrRecurringBonus;
 
       const totalValue = currentGS + currentUL;
+      
+      // 4. PENALITA DI RISCATTO (Pag. 3)
       const penaltyTable = PRODUCT_RULES.SURRENDER_PENALTIES[inputs.cppClass];
       const penaltyRate = yr <= penaltyTable.length ? penaltyTable[yr - 1] : 0;
       
+      // 5. CASO MORTE (Pag. 2)
       const deathIncPerc = PRODUCT_RULES.DEATH_BENEFIT_PERCENTAGE(yrAge);
       const cappedIncrement = Math.min(totalValue * deathIncPerc, 200000);
       const standardDeathBenefit = totalValue + cappedIncrement;
       
+      // Garanzia Minima (Primi 5 anni se età <= 70)
       let finalDeathBenefit = standardDeathBenefit;
       if (yr <= 5 && yrAge <= 70) {
         finalDeathBenefit = Math.max(inputs.initialPremium, standardDeathBenefit);
@@ -99,12 +110,12 @@ const App: React.FC = () => {
 
       results.push({
         year: yr,
-        gsValue: Math.round(currentGS),
-        unitLinkedValue: Math.round(currentUL),
-        totalValue: Math.round(totalValue),
-        surrenderValue: Math.round(totalValue * (1 - penaltyRate)),
-        deathBenefit: Math.round(finalDeathBenefit),
-        bonusAccumulated: Math.round(totalBonusAccumulated),
+        gsValue: currentGS, // Conserviamo float per precisione audit, arrotondiamo nel rendering
+        unitLinkedValue: currentUL,
+        totalValue: totalValue,
+        surrenderValue: totalValue * (1 - penaltyRate),
+        deathBenefit: finalDeathBenefit,
+        bonusAccumulated: totalBonusAccumulated,
         appliedReturnGS: yrReturnGS,
         appliedReturnUL: yrReturnUL,
       });
@@ -120,13 +131,13 @@ const App: React.FC = () => {
             <div className="w-8 h-8 bg-white rounded-lg flex items-center justify-center text-[#003399] font-black text-lg shadow-lg">Z</div>
             <div className="hidden sm:block">
               <h1 className="text-lg font-black leading-none tracking-tight">Zurich MultInvest Plus</h1>
-              <p className="text-[9px] font-black text-blue-200 uppercase tracking-widest mt-0.5 opacity-80">Edizione Blindata v1.0</p>
+              <p className="text-[9px] font-black text-blue-200 uppercase tracking-widest mt-0.5 opacity-80">Edizione Blindata v1.1</p>
             </div>
           </div>
           <div className="flex items-center gap-3">
              <div className="flex items-center gap-2 px-3 py-1 bg-emerald-500/20 rounded-full border border-emerald-500/30">
                 <div className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></div>
-                <span className="text-[9px] font-black uppercase text-emerald-400 tracking-tighter">SISTEMA CONGELATO</span>
+                <span className="text-[9px] font-black uppercase text-emerald-400 tracking-tighter">MOTORE CERTIFICATO</span>
              </div>
              <span className="text-[10px] font-black bg-white/10 px-4 py-1.5 rounded-full border border-white/20 uppercase tracking-wider">
                Materiale per uso Intermediari
