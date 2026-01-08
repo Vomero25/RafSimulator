@@ -1,7 +1,7 @@
 
 import React, { useState } from 'react';
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, ReferenceLine } from 'recharts';
-import { Shield, Lock, Info, TrendingUp, Wallet, CheckCircle2, ChevronRight } from 'lucide-react';
+import { Shield, Lock, Info, TrendingUp, Wallet, CheckCircle2 } from 'lucide-react';
 import { YearProjection, SimulationInputs } from '../types';
 import { PRODUCT_RULES } from '../constants';
 import ProductDetails from './ProductDetails';
@@ -30,41 +30,24 @@ const ResultsDashboard: React.FC<Props> = ({ projections, inputs }) => {
   const formatEuroPrecise = (val: number) => 
     new Intl.NumberFormat('it-IT', { style: 'currency', currency: 'EUR', minimumFractionDigits: 2 }).format(val);
 
-  // LOGICA DI AUDIT CERTIFICATA (ANNO 1 E ANNO 2)
+  // LOGICA DI AUDIT CERTIFICATA - ESTRATTA DIRETTAMENTE DAL MOTORE DI CALCOLO
   const auditData = (() => {
-    // Calcoli Anno 1
     const upfrontRate = inputs.isCampaignPeriod ? 0.01 : 0;
+    const sacrificeRate = inputs.bonusSacrificeCF ? 0.01 : 0;
     const upfrontBonus = initial * upfrontRate;
-    const sacrificeCF = inputs.bonusSacrificeCF ? initial * 0.01 : 0;
+    const sacrificeCF = initial * sacrificeRate;
     const totalInvested = initial + upfrontBonus + sacrificeCF;
+    
     const gsPartStart = totalInvested * (inputs.gsPercentage / 100);
     const ulPartStart = totalInvested * (1 - (inputs.gsPercentage / 100));
-    
-    const gsNetRate = inputs.estimatedGrowthGS - PRODUCT_RULES.GS_MANAGEMENT_FEE[inputs.cppClass];
-    const gsBonusRateYr1 = inputs.isCampaignPeriod ? PRODUCT_RULES.CAMPAIGN_BONUS_2026.GS_RECURRING_YR1 : 0;
-    const gsRecurringBonusYr1 = gsPartStart * gsBonusRateYr1;
-    const gsFinalYr1 = (gsPartStart * (1 + gsNetRate)) + gsRecurringBonusYr1;
-    
-    const ulNetRateYr1 = inputs.estimatedGrowthUnitLinked - PRODUCT_RULES.ANNUAL_MANAGEMENT_FEE[inputs.cppClass].first5;
-    const ulFinalYr1 = ulPartStart * (1 + ulNetRateYr1);
-    
-    const totalLordoYr1 = gsFinalYr1 + ulFinalYr1;
-    const penaltyRateYr1 = PRODUCT_RULES.SURRENDER_PENALTIES[inputs.cppClass][0];
-    const penaltyAmountYr1 = totalLordoYr1 * penaltyRateYr1;
-    const surrenderValueYr1 = totalLordoYr1 - penaltyAmountYr1;
 
-    // Calcoli Anno 2
-    const gsBonusRateYr2 = inputs.isCampaignPeriod ? PRODUCT_RULES.CAMPAIGN_BONUS_2026.GS_RECURRING_YR2 : 0;
-    const gsRecurringBonusYr2 = gsPartStart * gsBonusRateYr2; // Base è sempre la quota GS iniziale post-upfront
-    const gsFinalYr2 = (gsFinalYr1 * (1 + gsNetRate)) + gsRecurringBonusYr2;
-    
-    const ulNetRateYr2 = inputs.estimatedGrowthUnitLinked - PRODUCT_RULES.ANNUAL_MANAGEMENT_FEE[inputs.cppClass].first5;
-    const ulFinalYr2 = ulFinalYr1 * (1 + ulNetRateYr2);
-    
-    const totalLordoYr2 = gsFinalYr2 + ulFinalYr2;
-    const penaltyRateYr2 = PRODUCT_RULES.SURRENDER_PENALTIES[inputs.cppClass][1];
-    const penaltyAmountYr2 = totalLordoYr2 * penaltyRateYr2;
-    const surrenderValueYr2 = totalLordoYr2 - penaltyAmountYr2;
+    // Dati Anno 1 dal motore
+    const yr1 = projections[0];
+    const gsNetRate = inputs.estimatedGrowthGS - PRODUCT_RULES.GS_MANAGEMENT_FEE[inputs.cppClass];
+    const ulNetRate = inputs.estimatedGrowthUnitLinked - PRODUCT_RULES.ANNUAL_MANAGEMENT_FEE[inputs.cppClass].first5;
+
+    // Dati Anno 2 dal motore (se disponibile)
+    const yr2 = projections[1] || yr1;
 
     return {
       1: {
@@ -72,30 +55,30 @@ const ResultsDashboard: React.FC<Props> = ({ projections, inputs }) => {
         gsOpening: gsPartStart,
         ulOpening: ulPartStart,
         gsNetRate,
-        ulNetRate: ulNetRateYr1,
-        bonusRate: gsBonusRateYr1,
-        bonusAmount: gsRecurringBonusYr1,
-        gsClosing: gsFinalYr1,
-        ulClosing: ulFinalYr1,
-        totalGross: totalLordoYr1,
-        penaltyRate: penaltyRateYr1,
-        penaltyAmount: penaltyAmountYr1,
-        surrenderValue: surrenderValueYr1
+        ulNetRate,
+        bonusRate: inputs.isCampaignPeriod ? 0.005 : 0,
+        bonusAmount: inputs.isCampaignPeriod ? gsPartStart * 0.005 : 0,
+        gsClosing: yr1.gsValue,
+        ulClosing: yr1.unitLinkedValue,
+        totalGross: yr1.totalValue,
+        penaltyRate: PRODUCT_RULES.SURRENDER_PENALTIES[inputs.cppClass][0],
+        penaltyAmount: yr1.totalValue - yr1.surrenderValue,
+        surrenderValue: yr1.surrenderValue
       },
       2: {
-        opening: totalLordoYr1,
-        gsOpening: gsFinalYr1,
-        ulOpening: ulFinalYr1,
+        opening: yr1.totalValue,
+        gsOpening: yr1.gsValue,
+        ulOpening: yr1.unitLinkedValue,
         gsNetRate,
-        ulNetRate: ulNetRateYr2,
-        bonusRate: gsBonusRateYr2,
-        bonusAmount: gsRecurringBonusYr2,
-        gsClosing: gsFinalYr2,
-        ulClosing: ulFinalYr2,
-        totalGross: totalLordoYr2,
-        penaltyRate: penaltyRateYr2,
-        penaltyAmount: penaltyAmountYr2,
-        surrenderValue: surrenderValueYr2
+        ulNetRate, // Resta "first5" fino al 5 anno
+        bonusRate: inputs.isCampaignPeriod ? 0.010 : 0,
+        bonusAmount: inputs.isCampaignPeriod ? gsPartStart * 0.010 : 0,
+        gsClosing: yr2.gsValue,
+        ulClosing: yr2.unitLinkedValue,
+        totalGross: yr2.totalValue,
+        penaltyRate: PRODUCT_RULES.SURRENDER_PENALTIES[inputs.cppClass][1],
+        penaltyAmount: yr2.totalValue - yr2.surrenderValue,
+        surrenderValue: yr2.surrenderValue
       }
     };
   })();
@@ -185,7 +168,7 @@ const ResultsDashboard: React.FC<Props> = ({ projections, inputs }) => {
               <div className="space-y-3 font-medium text-[11px] text-slate-600">
                 <div className="flex justify-between border-b border-slate-100 pb-2 italic text-slate-400">
                   <span>{activeAuditYear === 1 ? 'Capitale Lordo Versato' : 'Valore Totale fine Anno 1'}</span>
-                  <span>{formatEuroPrecise(activeAuditYear === 1 ? initial : auditData[1].totalGross)}</span>
+                  <span>{formatEuroPrecise(activeAuditYear === 1 ? initial : projections[0].totalValue)}</span>
                 </div>
                 {activeAuditYear === 1 && (
                   <>
